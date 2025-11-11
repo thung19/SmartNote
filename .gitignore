@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.dist-info/
+
+# Envs
+.env
+.env.*
+venv/
+.venv/
+smartnote_env/
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
