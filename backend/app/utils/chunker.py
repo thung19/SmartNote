@@ -1,3 +1,5 @@
+from typing import List
+
 
 """
 Split text into paragraphs based on double newlines, cleaning up extra whitespace.

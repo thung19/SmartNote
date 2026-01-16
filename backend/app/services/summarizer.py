@@ -3,12 +3,14 @@ from typing import List, Dict, Any
 import logging
 from .searcher import search_chunks
 
+import ollama
+
 logger = logging.getLogger(__name__)
 
 '''
 Turns a list of chunks from search_chunks() into a context string
 '''
-def build_context(chunks: List[dict[str, Any]]) -> str:
+def build_context(chunks: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     
     # Loop through each chunk starting at 1. Get the index and chunk value
@@ -61,15 +63,41 @@ Calls the LLM model with the built prompt to get an answer
 @param prompt: The prompt string to send to the LLM
 '''
 def call_llm(prompt: str) -> str:
-   logger.warning("call_llm() is not implemented. Returning placeholder response.")
+    try:
+        response = ollama.chat(
+           model = "llama3.2",
+           messages=[
+               {"role": "user", "content": prompt}
+               ],
+        )
 
-   return "This is a placeholder response from call_llm()."
+        content = response.get("message", {}).get("content", "")
+        return content.strip() if content else "Model returned empty response."
+    except Exception as e:
+       logger.error("Error calling local LLM: %s", e)
+       return "There was an error calling the model. Check the logs for details."
+         
+
+
+def summarize_answer(query: str, context: str) -> str:
+    """
+    Simple helper used by tests: given a query and a context string,
+    build a prompt and return only the model's answer text.
+    """
+    cleaned_query = query.strip()
+    cleaned_context = (context or "").strip()
+
+    if not cleaned_query:
+        return "Query is empty. Please provide a question."
+
+    prompt = make_prompt(cleaned_query, cleaned_context)
+    return call_llm(prompt)
 
 
 '''
 Retrieves chunks, build prompt, and calls LLM to get answer
 '''
-def answer_query(query: str, top_k: int = 5) -> str:
+def answer_query(query: str, top_k: int = 5) -> Dict[str, Any]:
     # Clean the query
     cleaned_query = query.strip()
 

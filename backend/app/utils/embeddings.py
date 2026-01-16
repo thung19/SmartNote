@@ -1,4 +1,5 @@
 from  sentence_transformers import SentenceTransformer
+from typing import List
 
 _model: SentenceTransformer | None = None
 
