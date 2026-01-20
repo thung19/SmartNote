@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export async function indexNotes(rootDir: string) {
     const res = await fetch(`${API_BASE}/notes/index`, {
@@ -11,7 +11,7 @@ export async function indexNotes(rootDir: string) {
 }
 
 export async function searchNotes(query: string, topK: number) {
-    const url = new URL(`{API_BASE}/notes/search`);
+    const url = new URL(`${API_BASE}/notes/search`);
     url.searchParams.set("q", query);
     url.searchParams.set("top_k", String(topK));
     const res = await fetch(url.toString());

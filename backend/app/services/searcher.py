@@ -5,6 +5,8 @@ import numpy as np
 from ..db.database import get_connection
 from ..utils.embeddings import embed_text
 
+MIN_SIMILARITY = 0.30
+
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     # Flattens array
@@ -113,6 +115,8 @@ def search_chunks(
 
         # Sort results by score descending
         results.sort(key=lambda r: r["score"], reverse=True)
+
+        results = [r for r in results if r["score"] >= MIN_SIMILARITY]
 
         # Return only top_k results
         if top_k > 0:
