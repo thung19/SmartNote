@@ -6,7 +6,7 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "rag.duckdb"
 
 def _get_db_path() -> Path:
     # Allow overriding DB path via environment variable
-    override = os.getenv("SMARTNOTE_DB_PATH)")
+    override = os.getenv("SMARTNOTE_DB_PATH")
     if override:
         return Path(override)
     else:
