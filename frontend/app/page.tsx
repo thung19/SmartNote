@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { nanoid } from "nanoid";
 
 import { useSessionStore } from "@/app/state/sessionStore";
 import type { ImportItem } from "@/app/state/sessionStore";
-import { ingestNotes, healthCheck } from "@/lib/api";
+
+import { ingestNotes, clearNotes } from "@/lib/api";
+import { getOrCreateSessionId, clearSessionId } from "@/lib/session";
 
 export default function Home() {
   const { state, dispatch } = useSessionStore();
@@ -48,13 +50,15 @@ export default function Home() {
   }
 
   async function ingestQueued() {
+    const sid = getOrCreateSessionId();
+
     const queued = state.items.filter((it) => !it.ingested && it.stage !== "error");
     if (queued.length === 0) {
       setIngestStatus("Nothing to ingest (everything is already ingested).");
       return;
     }
 
-    setIngestStatus(`Ingesting ${queued.length} file(s) to backend...`);
+    setIngestStatus(`Ingesting ${queued.length} file(s) to backend memory...`);
 
     for (const it of queued) {
       try {
@@ -64,7 +68,7 @@ export default function Home() {
 
         dispatch({ type: "SET_ITEM_STAGE", id: it.id, stage: "parsing", progress: 50 });
 
-        await ingestNotes([
+        await ingestNotes(sid, [
           {
             path: it.displayPath,
             text,
@@ -73,7 +77,8 @@ export default function Home() {
           },
         ]);
 
-        dispatch({ type: "SET_ITEM_STAGE", id: it.id, stage: "ready", progress: 100 });
+        // ✅ mark ingested true
+        dispatch({ type: "SET_ITEM_STAGE", id: it.id, stage: "ready", progress: 100, ingested: true });
       } catch (e: any) {
         dispatch({
           type: "SET_ITEM_STAGE",
@@ -88,6 +93,25 @@ export default function Home() {
     setIngestStatus("✅ Ingest complete.");
   }
 
+  async function clearSessionEverywhere() {
+    const sid = getOrCreateSessionId();
+
+    // Clear frontend state
+    dispatch({ type: "CLEAR_ALL" });
+    setNotice("");
+    setIngestStatus("");
+
+    // Clear backend session (best-effort)
+    try {
+      await clearNotes(sid);
+    } catch {
+      // ignore if backend down
+    }
+
+    // Clear client session id so next run gets a new backend store
+    clearSessionId();
+  }
+
   const queuedCount = state.items.length;
   const ingestedCount = state.items.filter((it) => it.ingested).length;
 
@@ -95,20 +119,13 @@ export default function Home() {
     <main className="max-w-3xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">SmartNote</h1>
-        <button
-          className="px-3 py-2 rounded border text-sm hover:bg-gray-50"
-          onClick={() => {
-            dispatch({ type: "CLEAR_ALL" });
-            setNotice("");
-            setIngestStatus("");
-          }}
-        >
+        <button className="px-3 py-2 rounded border text-sm hover:bg-gray-50" onClick={clearSessionEverywhere}>
           Clear session
         </button>
       </div>
 
       <p className="text-sm text-gray-600">
-        Step 1: select notes (queued locally). Step 2: click “Ingest to backend” to chunk+embed+store in DuckDB.
+        Step 1: select notes (queued locally). Step 2: click “Ingest to backend” to chunk + embed + store in RAM (session-scoped).
       </p>
 
       {/* Hidden inputs */}
@@ -197,7 +214,7 @@ export default function Home() {
 
             <div className="mt-1 flex items-center justify-between gap-3">
               <div className="text-xs text-gray-600">
-                {it.stage} ({it.progress}%)
+                {it.stage} ({it.progress}%) {it.ingested ? "• ingested" : ""}
               </div>
 
               <div className="w-40 h-2 bg-gray-100 rounded overflow-hidden">
@@ -210,7 +227,6 @@ export default function Home() {
         ))}
       </div>
 
-      {/* After ingest, these pages should work */}
       <div className="pt-2 flex gap-4 underline text-sm">
         <Link href="/search">Search</Link>
         <Link href="/ask">Ask</Link>
