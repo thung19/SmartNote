@@ -5,8 +5,8 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.routes import notes
-from backend.app.store.memory_store import evict_expired
+from app.routes import notes
+from app.store.memory_store import evict_expired
 from dotenv import load_dotenv
 load_dotenv()
 
