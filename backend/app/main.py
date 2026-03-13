@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import time
+import logging
+from typing import List
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,6 +11,8 @@ from app.routes import notes
 from app.store.memory_store import evict_expired
 from dotenv import load_dotenv
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Creates a FastAPI app object
 app = FastAPI(title="SmartNote")
@@ -23,12 +27,23 @@ _default_origins = [
 
 # Comma-separated list, e.g.:
 # SMARTNOTE_CORS_ORIGINS="https://your-frontend.vercel.app,http://localhost:3000"
+def _parse_origins(raw: str) -> List[str]:
+    return [o.strip().rstrip("/") for o in (raw or "").split(",") if o.strip()]
+
+
 origins_env = os.getenv("SMARTNOTE_CORS_ORIGINS", "")
-allowed_origins = [o.strip() for o in origins_env.split(",") if o.strip()] or _default_origins
+allowed_origins = _parse_origins(origins_env) or _default_origins
+
+# Optional regex for dynamic preview URLs (for example, Vercel previews)
+# SMARTNOTE_CORS_ORIGIN_REGEX="https://smartnote-.*\\.vercel\\.app"
+origin_regex = os.getenv("SMARTNOTE_CORS_ORIGIN_REGEX", "").strip() or None
+
+logger.info("CORS configured: origins=%s regex=%s", allowed_origins, origin_regex)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

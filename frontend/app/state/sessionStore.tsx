@@ -40,6 +40,7 @@ type Action =
   | { type: "ADD_ITEMS"; items: ImportItem[] } // <-- you already dispatch this
   | { type: "SET_ITEM_STAGE"; id: string; stage: ImportStage; progress: number; error?: string; ingested?: boolean }
   | { type: "ADD_RESULT"; doc: SessionDocument; chunks: SessionChunk[] }
+  | { type: "REMOVE_ITEM"; id: string }
   | { type: "CLEAR_ALL" };
 
 const SessionContext = React.createContext<{
@@ -94,6 +95,27 @@ function reducer(state: State, action: Action): State {
         ...state,
         docs: [action.doc, ...state.docs],
         chunks: [...action.chunks, ...state.chunks],
+      };
+    }
+
+    case "REMOVE_ITEM": {
+      const removedItem = state.items.find((item) => item.id === action.id);
+      if (!removedItem) {
+        return state;
+      }
+
+      const filteredDocs = state.docs.filter((doc) => doc.displayPath !== removedItem.displayPath);
+      const removedDocIds = new Set(
+        state.docs
+          .filter((doc) => doc.displayPath === removedItem.displayPath)
+          .map((doc) => doc.id)
+      );
+
+      return {
+        ...state,
+        items: state.items.filter((item) => item.id !== action.id),
+        docs: filteredDocs,
+        chunks: state.chunks.filter((chunk) => !removedDocIds.has(chunk.docId)),
       };
     }
 
