@@ -4,10 +4,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
 
-from backend.app.services.searcher import search
-from backend.app.services.summarizer import answer_query
-from backend.app.services.ingester import ingest_docs
-from backend.app.store.memory_store import clear_session, touch_session
+from app.services.searcher import search
+from app.services.summarizer import answer_query
+from app.services.ingester import ingest_docs
+from app.store.memory_store import clear_session, touch_session
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 

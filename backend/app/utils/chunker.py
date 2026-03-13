@@ -14,7 +14,7 @@ def _split_into_paragraphs(text: str) -> List[str]:
     
     #Loop through parts
     for part in raw_parts:
-        # Remove leading and trailing whitespace from each part
+        # Remove leading and trailing whitespace from each part 
         stripped_part = part.strip()
         # Split the stripped part into individual lines
         lines = stripped_part.splitlines()
