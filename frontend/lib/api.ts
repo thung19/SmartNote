@@ -1,6 +1,6 @@
 // lib/api.ts
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-const API_BASE = RAW_API_BASE.trim().replace(/\/+$/, "");
+const rawApiBase = process.env.NEXT_PUBLIC_API_BASE?.trim();
+const API_BASE = (rawApiBase && rawApiBase.length > 0 ? rawApiBase : "/api").replace(/\/+$/, "");
 
 async function readError(res: Response) {
   const text = await res.text().catch(() => "");
@@ -14,7 +14,7 @@ async function safeFetch(url: string, init: RequestInit, label: string) {
     const message = error instanceof Error ? error.message : "network error";
     throw new Error(
       `${label} failed: could not reach API at ${API_BASE}. ` +
-      `Check NEXT_PUBLIC_API_BASE, CORS, and backend health. ` +
+      `Check frontend env, rewrites, CORS, and backend health. ` +
       `Details: ${message}`
     );
   }
@@ -28,12 +28,14 @@ export type IngestDoc = {
 };
 
 export async function searchNotes(sessionId: string, query: string, topK: number) {
-  const url = new URL(`${API_BASE}/notes/search`);
-  url.searchParams.set("session_id", sessionId);
-  url.searchParams.set("q", query);
-  url.searchParams.set("top_k", String(topK));
+  const params = new URLSearchParams({
+    session_id: sessionId,
+    q: query,
+    top_k: String(topK),
+  });
+  const url = `${API_BASE}/notes/search?${params.toString()}`;
 
-  const res = await safeFetch(url.toString(), { cache: "no-store" }, "Search");
+  const res = await safeFetch(url, { cache: "no-store" }, "Search");
   if (!res.ok) throw new Error(`Search failed: ${await readError(res)}`);
   return res.json();
 }
