@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { SessionProvider } from "./state/sessionStore";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
   subsets: ["latin"],
 });
 
@@ -23,38 +23,31 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${bricolage.variable} ${geistMono.variable} antialiased`}>
         <SessionProvider>
           <div className="min-h-screen">
-            <header className="sticky top-0 z-40 border-b border-white/60 bg-white/75 backdrop-blur-xl">
-              <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+            <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+              <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
                 <Link href="/" className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-cyan-400 text-lg text-white shadow-lg shadow-violet-500/25">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-violet-600 via-fuchsia-500 to-cyan-400 text-base text-white shadow-md shadow-violet-500/20">
                     ✦
                   </div>
                   <div>
-                    <div className="text-base font-semibold text-slate-900">SmartNote</div>
-                    <div className="text-xs text-slate-500">Upload, search, and ask your notes</div>
+                    <div className="text-sm font-semibold tracking-tight text-slate-900">SmartNote</div>
+                    <div className="text-xs text-slate-400">Upload · Search · Ask</div>
                   </div>
                 </Link>
 
-                <nav className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/80 p-1 shadow-sm">
-                  <Link
-                    href="/"
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-violet-50 hover:text-violet-700"
-                  >
+                <nav className="flex items-center gap-0.5 text-sm font-medium text-slate-500">
+                  <Link href="/" className="px-3 py-1.5 transition hover:text-violet-700">
                     Home
                   </Link>
-                  <Link
-                    href="/search"
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-cyan-50 hover:text-cyan-700"
-                  >
+                  <span className="text-slate-300">·</span>
+                  <Link href="/search" className="px-3 py-1.5 transition hover:text-cyan-700">
                     Search
                   </Link>
-                  <Link
-                    href="/ask"
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-fuchsia-50 hover:text-fuchsia-700"
-                  >
+                  <span className="text-slate-300">·</span>
+                  <Link href="/ask" className="px-3 py-1.5 transition hover:text-fuchsia-700">
                     Ask
                   </Link>
                 </nav>
