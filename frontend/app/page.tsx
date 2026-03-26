@@ -50,20 +50,15 @@ export default function Home() {
     }));
 
     dispatch({ type: "ADD_ITEMS", items });
+    void ingestItems(items);
   }
 
-  async function ingestQueued() {
+  async function ingestItems(items: ImportItem[]) {
     const sid = getOrCreateSessionId();
 
-    const queued = state.items.filter((it) => !it.ingested && it.stage !== "error");
-    if (queued.length === 0) {
-      setIngestStatus("Nothing to ingest (everything is already ingested).");
-      return;
-    }
+    setIngestStatus(`Ingesting ${items.length} file(s) to backend memory...`);
 
-    setIngestStatus(`Ingesting ${queued.length} file(s) to backend memory...`);
-
-    for (const it of queued) {
+    for (const it of items) {
       try {
         dispatch({ type: "SET_ITEM_STAGE", id: it.id, stage: "reading", progress: 25 });
 
@@ -94,6 +89,15 @@ export default function Home() {
     }
 
     setIngestStatus("Ingest complete.");
+  }
+
+  async function ingestQueued() {
+    const queued = state.items.filter((it) => !it.ingested && it.stage !== "error");
+    if (queued.length === 0) {
+      setIngestStatus("Nothing to ingest (everything is already ingested).");
+      return;
+    }
+    await ingestItems(queued);
   }
 
   async function clearSessionEverywhere() {
@@ -260,7 +264,7 @@ export default function Home() {
         <p className="mt-1.5 text-sm text-slate-500">
           Drop <strong>.md</strong> or <strong>.txt</strong> files to queue them for ingestion.
         </p>
-        <p className="mt-1 text-xs text-slate-400">Files are queued locally first — click "Ingest to backend" when ready.</p>
+        <p className="mt-1 text-xs text-slate-400">Files are ingested automatically on upload.</p>
       </section>
 
       {/* File queue */}
