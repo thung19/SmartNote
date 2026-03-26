@@ -1,6 +1,5 @@
 // lib/api.ts
-const rawApiBase = process.env.NEXT_PUBLIC_API_BASE?.trim();
-const API_BASE = (rawApiBase && rawApiBase.length > 0 ? rawApiBase : "/api").replace(/\/+$/, "");
+const API_BASE = "/api";
 
 async function readError(res: Response) {
   const text = await res.text().catch(() => "");
