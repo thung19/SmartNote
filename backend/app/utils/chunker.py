@@ -1,102 +1,117 @@
-from typing import List
+import re
+from typing import List, Tuple
+
+# Matches markdown headers: #, ##, ###, etc.
+_HEADER_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+
+# Splits on sentence-ending punctuation followed by whitespace
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
-"""
-Split text into paragraphs based on double newlines, cleaning up extra whitespace.
-"""
+def _split_by_headers(text: str) -> List[Tuple[str, str]]:
+    """
+    Split markdown text into (heading, content) sections.
+    heading is the full header line, e.g. "## Goals".
+    Non-header content before the first header gets an empty heading.
+    """
+    sections: List[Tuple[str, str]] = []
+    last_end = 0
+    last_heading = ""
+
+    for match in _HEADER_RE.finditer(text):
+        if match.start() > last_end:
+            content = text[last_end:match.start()].strip()
+            if content:
+                sections.append((last_heading, content))
+        last_heading = match.group(0)
+        last_end = match.end()
+
+    remaining = text[last_end:].strip()
+    if remaining:
+        sections.append((last_heading, remaining))
+
+    return sections if sections else [("", text.strip())]
+
+
+def _split_sentences(text: str) -> List[str]:
+    parts = _SENTENCE_SPLIT_RE.split(text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _sentence_overlap(text: str, overlap_chars: int) -> str:
+    """
+    Return the last complete sentence(s) from text that fit within overlap_chars.
+    Falls back to the last sentence if none fit cleanly.
+    """
+    if not text or overlap_chars <= 0:
+        return ""
+
+    sentences = _split_sentences(text)
+    if not sentences:
+        return text[-overlap_chars:]
+
+    result: List[str] = []
+    total = 0
+    for sentence in reversed(sentences):
+        needed = len(sentence) + (1 if result else 0)
+        if total + needed <= overlap_chars:
+            result.insert(0, sentence)
+            total += needed
+        else:
+            break
+
+    # Always include at least the last sentence so overlap is never empty
+    if not result:
+        result = [sentences[-1]]
+
+    return " ".join(result)
+
+
 def _split_into_paragraphs(text: str) -> List[str]:
-    
-    # Splits text into a list of paragraphs based on double newlines
-    raw_parts = text.split("\n\n")
-
-    
     paragraphs: List[str] = []
-    
-    #Loop through parts
-    for part in raw_parts:
-        # Remove leading and trailing whitespace from each part 
-        stripped_part = part.strip()
-        # Split the stripped part into individual lines
-        lines = stripped_part.splitlines()
-
-        cleaned_lines = []
-        for line in lines:
-            # Strip whitespace from each line 
-            stripped_line = line.strip()
-
-            # Only keep non-empty lines.
-            if stripped_line:  
-                cleaned_lines.append(stripped_line)
-
-         # Reassemble cleaned lines with a single new line between.
-        cleaned = "\n".join(cleaned_lines)
-
-        # Add cleaned paragraph to list of paragraphs if not empty
+    for part in text.split("\n\n"):
+        lines = [line.strip() for line in part.strip().splitlines() if line.strip()]
+        cleaned = "\n".join(lines)
         if cleaned:
             paragraphs.append(cleaned)
-
     return paragraphs
 
-# Takes long text and splits it into chunks of specified max character length with optional overlap.
-def chunk_text(text: str, max_chars: int = 800, overlap: int = 200,) -> List[str]:
-    # Return nothing if empty
+
+def chunk_text(text: str, max_chars: int = 800, overlap: int = 200) -> List[str]:
     if not text:
         return []
-    
-    # Split text into paragraphs
-    paragraphs = _split_into_paragraphs(text)
 
-    rough_chunks: List[str] = []
-    current: List[str] = []
-    current_len = 0
+    sections = _split_by_headers(text)
+    all_chunks: List[str] = []
 
-    #Loop through each paragraph
-    for para in paragraphs:
-        para_len = len(para)
-        
-        # Check if adding this paragraph would exceed max_chars
-        if current and current_len + para_len + 2 > max_chars:
+    for heading, content in sections:
+        prefix = f"{heading}\n\n" if heading else ""
+        paragraphs = _split_into_paragraphs(content)
 
-            # If so, add the current chunk and set the new one
-            rough_chunks.append("\n\n".join(current))
-            current = [para]
-            current_len = para_len
-        else:
+        current: List[str] = []
+        current_len = len(prefix)
 
-            # Otherwise, add paragraph to current chunk
-            current.append(para)
-            current_len += para_len + 2
+        for para in paragraphs:
+            para_len = len(para)
 
-    # Add any remaining paragraphs as the last chunk. We now have non-overlapped chunks
-    if current:
-        rough_chunks.append("\n\n".join(current))
+            if current and current_len + para_len + 2 > max_chars:
+                # Flush
+                all_chunks.append(prefix + "\n\n".join(current))
 
-    # If no overlap is needed, return the rough chunks
-    if overlap <= 0 or len(rough_chunks) == 1:
-        return rough_chunks
-    
-    final_chunks: List[str] = []
-    
-    #Loop through rough chunks to create overlapped chunks
-    for i, chunk in enumerate(rough_chunks):
+                # Sentence-level overlap from flushed content
+                overlap_text = _sentence_overlap("\n\n".join(current), overlap)
 
-        # Add the first chunk as is
-        if i == 0:
-            final_chunks.append(chunk)
-            continue
-        
-        # For subsequent chunks, add overlap from previous chunk
-        # Get the last chunk added to final chunks
-        prev_chunk = final_chunks[-1]
+                if overlap_text:
+                    current = [overlap_text, para]
+                    current_len = len(prefix) + len(overlap_text) + 2 + para_len
+                else:
+                    current = [para]
+                    current_len = len(prefix) + para_len
+            else:
+                current.append(para)
+                current_len += para_len + 2
 
-        # Get the last 'overlap' characters from the previous chunk
-        overlap_text = prev_chunk[-overlap:]
-        # Combine overlap with current chunk
-        combined = overlap_text + "\n\n" + chunk
+        if current:
+            all_chunks.append(prefix + "\n\n".join(current))
 
-        # Add the combined chunk to final chuns
-        final_chunks.append(combined)
-
-    return final_chunks
-
-
+    return all_chunks
