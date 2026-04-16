@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List
 
 import numpy as np
@@ -15,6 +16,30 @@ MAX_DOCS_PER_INGEST = 50
 MAX_CHARS_PER_DOC = 200_000
 MAX_TOTAL_CHARS_PER_REQUEST = 500_000
 MAX_CHUNKS_PER_DOC = 2_000
+
+_CODE_EXTENSIONS = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".cpp", ".h",
+    ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".cs", ".sh", ".bash",
+    ".sql", ".r", ".lua", ".pl", ".m", ".scala", ".zig",
+}
+_MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdx"}
+
+
+def _detect_doc_type(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _MARKDOWN_EXTENSIONS:
+        return "markdown"
+    if ext in _CODE_EXTENSIONS:
+        return "code"
+    if ext in {".txt", ".text", ".log"}:
+        return "text"
+    if ext in {".html", ".htm", ".xml"}:
+        return "html"
+    if ext in {".json", ".yaml", ".yml", ".toml", ".ini", ".cfg"}:
+        return "config"
+    if ext in {".csv", ".tsv"}:
+        return "tabular"
+    return "unknown"
 
 
 def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -45,6 +70,8 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
     for d in docs:
         path_str = str(d.get("path", "") or "").strip()
         text = str(d.get("text", "") or "")
+        title = str(d.get("title", "") or "").strip()
+        mtime = float(d.get("mtime", 0) or 0)
 
         if not path_str:
             logger.warning("Skipping doc with missing path.")
@@ -65,7 +92,12 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
             rejected += 1
             break
 
-        chunks = chunk_text_rich(text)
+        doc_type = _detect_doc_type(path_str)
+
+        chunking_result = chunk_text_rich(text)
+        chunks = chunking_result.chunks
+        section_texts = chunking_result.sections
+
         if not chunks:
             skipped_empty += 1
             continue
@@ -73,6 +105,12 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
         if len(chunks) > MAX_CHUNKS_PER_DOC:
             chunks = chunks[:MAX_CHUNKS_PER_DOC]
             rejected += 1
+
+        # Prefix section_ids with the file path so they are globally unique
+        prefixed_sections = {
+            f"{path_str}::{sid}": txt
+            for sid, txt in section_texts.items()
+        }
 
         chunk_texts = [c.text for c in chunks]
         vectors = embed_batch(chunk_texts)
@@ -86,7 +124,7 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
             continue
 
         stored: List[StoredChunk] = []
-        total_chunks = len(chunks)
+        total_chunk_count = len(chunks)
         for idx, (chunk_result, vec_list) in enumerate(zip(chunks, vectors)):
             vec = np.asarray(vec_list, dtype=np.float32).ravel()
             if vec.size == 0:
@@ -98,12 +136,16 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
                     text=chunk_result.text,
                     vector=vec,
                     chunk_index=idx,
-                    total_chunks=total_chunks,
+                    total_chunks=total_chunk_count,
                     heading_breadcrumb=chunk_result.heading_breadcrumb,
+                    section_id=f"{path_str}::{chunk_result.section_id}",
+                    doc_type=doc_type,
+                    title=title,
+                    mtime=mtime,
                 )
             )
 
-        store.upsert_file_chunks(path_str, stored)
+        store.upsert_file_chunks(path_str, stored, section_texts=prefixed_sections)
         ingested += 1
 
     return {"ingested": ingested, "skipped_empty": skipped_empty, "rejected": rejected}

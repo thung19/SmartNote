@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 import threading
 import time
 
 import numpy as np
+
+from ..utils.bm25 import BM25Index
 
 
 @dataclass
@@ -17,37 +19,67 @@ class StoredChunk:
     chunk_index: int = 0          # position within the file's chunks
     total_chunks: int = 0         # total chunks for this file
     heading_breadcrumb: str = ""  # e.g. "## Arch > ### DB"
+    section_id: str = ""          # parent section ID for expansion
+    doc_type: str = ""            # e.g. "markdown", "code", "text"
+    title: str = ""               # document title
+    mtime: float = 0.0            # last-modified timestamp
 
 
 class MemoryStore:
     """
     Per-session in-memory store. Thread-safe.
     Overwrite semantics per file_path via upsert_file_chunks.
+    Maintains both a vector index and a BM25 keyword index.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._chunks: List[StoredChunk] = []
         self._by_path: Dict[str, List[int]] = {}
+        self._bm25 = BM25Index()
+        self._bm25_dirty = True
+        self._section_texts: Dict[str, str] = {}  # section_id -> full text
 
     def clear(self) -> None:
         with self._lock:
             self._chunks = []
             self._by_path = {}
+            self._bm25 = BM25Index()
+            self._bm25_dirty = True
+            self._section_texts = {}
 
-    def upsert_file_chunks(self, file_path: str, chunks: List[StoredChunk]) -> None:
+    def upsert_file_chunks(
+        self,
+        file_path: str,
+        chunks: List[StoredChunk],
+        section_texts: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
         Overwrite semantics: remove old chunks for file_path, then add new ones.
+        Optionally store section texts for parent expansion.
         """
         with self._lock:
             old_idxs = set(self._by_path.get(file_path, []))
             if old_idxs:
+                # Remove old section texts for this file
+                old_section_ids = {
+                    self._chunks[i].section_id
+                    for i in old_idxs
+                    if self._chunks[i].section_id
+                }
+                for sid in old_section_ids:
+                    self._section_texts.pop(sid, None)
+
                 self._chunks = [c for i, c in enumerate(self._chunks) if i not in old_idxs]
                 self._rebuild_index_unlocked()
 
             start = len(self._chunks)
             self._chunks.extend(chunks)
             self._by_path[file_path] = list(range(start, start + len(chunks)))
+            self._bm25_dirty = True
+
+            if section_texts:
+                self._section_texts.update(section_texts)
 
     def all_chunks(self) -> List[StoredChunk]:
         with self._lock:
@@ -68,6 +100,22 @@ class MemoryStore:
             neighbors.sort(key=lambda c: c.chunk_index)
             return neighbors
 
+    def get_section_text(self, section_id: str) -> Optional[str]:
+        with self._lock:
+            return self._section_texts.get(section_id)
+
+    def bm25_search(self, query: str, top_k: int = 0) -> List[Tuple[int, float]]:
+        """
+        Keyword search using BM25. Returns (chunk_list_index, score) pairs.
+        Rebuilds the BM25 index lazily if chunks have changed.
+        """
+        with self._lock:
+            if self._bm25_dirty:
+                texts = [ch.text for ch in self._chunks]
+                self._bm25.index(texts)
+                self._bm25_dirty = False
+            return self._bm25.search(query, top_k=top_k)
+
     def stats(self) -> dict:
         with self._lock:
             return {"files": len(self._by_path), "chunks": len(self._chunks)}
@@ -76,6 +124,7 @@ class MemoryStore:
         self._by_path = {}
         for idx, ch in enumerate(self._chunks):
             self._by_path.setdefault(ch.file_path, []).append(idx)
+        self._bm25_dirty = True
 
 
 # ---------------------------
