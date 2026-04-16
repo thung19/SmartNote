@@ -14,6 +14,9 @@ class StoredChunk:
     file_path: str
     text: str
     vector: np.ndarray  # shape: (d,), expected float32 and normalized
+    chunk_index: int = 0          # position within the file's chunks
+    total_chunks: int = 0         # total chunks for this file
+    heading_breadcrumb: str = ""  # e.g. "## Arch > ### DB"
 
 
 class MemoryStore:
@@ -49,6 +52,21 @@ class MemoryStore:
     def all_chunks(self) -> List[StoredChunk]:
         with self._lock:
             return list(self._chunks)
+
+    def get_neighbors(self, file_path: str, chunk_index: int, window: int = 1) -> List[StoredChunk]:
+        """
+        Return neighboring chunks (by chunk_index) from the same file.
+        Excludes the chunk at chunk_index itself.
+        """
+        with self._lock:
+            idxs = self._by_path.get(file_path, [])
+            neighbors: List[StoredChunk] = []
+            for i in idxs:
+                ch = self._chunks[i]
+                if ch.chunk_index != chunk_index and abs(ch.chunk_index - chunk_index) <= window:
+                    neighbors.append(ch)
+            neighbors.sort(key=lambda c: c.chunk_index)
+            return neighbors
 
     def stats(self) -> dict:
         with self._lock:

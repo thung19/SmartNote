@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from ..utils.chunker import chunk_text
+from ..utils.chunker import chunk_text_rich
 from ..utils.embeddings import embed_batch
 from ..store.memory_store import get_store, StoredChunk
 
@@ -65,7 +65,7 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
             rejected += 1
             break
 
-        chunks = chunk_text(text)
+        chunks = chunk_text_rich(text)
         if not chunks:
             skipped_empty += 1
             continue
@@ -74,7 +74,8 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
             chunks = chunks[:MAX_CHUNKS_PER_DOC]
             rejected += 1
 
-        vectors = embed_batch(chunks)
+        chunk_texts = [c.text for c in chunks]
+        vectors = embed_batch(chunk_texts)
         if vectors is None or len(vectors) == 0:
             skipped_empty += 1
             continue
@@ -85,7 +86,8 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
             continue
 
         stored: List[StoredChunk] = []
-        for idx, (chunk_text_value, vec_list) in enumerate(zip(chunks, vectors)):
+        total_chunks = len(chunks)
+        for idx, (chunk_result, vec_list) in enumerate(zip(chunks, vectors)):
             vec = np.asarray(vec_list, dtype=np.float32).ravel()
             if vec.size == 0:
                 continue
@@ -93,8 +95,11 @@ def ingest_docs(session_id: str, docs: List[Dict[str, Any]]) -> Dict[str, int]:
                 StoredChunk(
                     chunk_id=f"{path_str}::chunk::{idx}",
                     file_path=path_str,
-                    text=chunk_text_value,
+                    text=chunk_result.text,
                     vector=vec,
+                    chunk_index=idx,
+                    total_chunks=total_chunks,
+                    heading_breadcrumb=chunk_result.heading_breadcrumb,
                 )
             )
 
